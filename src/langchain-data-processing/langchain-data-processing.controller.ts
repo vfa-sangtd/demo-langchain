@@ -11,7 +11,6 @@ import {
 import { LangChainDataProcessingService } from './langchain-data-processing.service';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags } from '@nestjs/swagger';
-import { UploadFileDto } from './dto/upload-file.dto';
 
 @ApiTags('Data Processing')
 @Controller('/data')
@@ -20,9 +19,15 @@ export class LangChainDataProcessingController {
     private readonly langChainDataProcessingService: LangChainDataProcessingService,
   ) {}
 
+  /**
+   * Handles the upload of a file and processes it. It supports files in PDF, TXT, and MD formats.
+   * @param {Express.Multer.File} file - The uploaded file to be processed.
+   * @returns {Promise<any>} - A success response or an error if processing fails.
+   * @memberof LangChainDataProcessingController
+   */
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
-  async uploadFile(
+  async embedding(
     @UploadedFile(
       new ParseFilePipe({
         validators: [
@@ -36,11 +41,7 @@ export class LangChainDataProcessingController {
       }),
     )
     file: Express.Multer.File,
-    @Body() condition: UploadFileDto,
-  ) {
-    return await this.langChainDataProcessingService.uploadFile(
-      file,
-      condition,
-    );
+  ): Promise<any> {
+    return await this.langChainDataProcessingService.embedding(file);
   }
 }

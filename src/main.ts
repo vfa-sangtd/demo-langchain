@@ -38,18 +38,18 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter());
 
   // Use DocumentBuilder to create a new Swagger document configuration
-  const config = new DocumentBuilder()
+  const swaggerConfig = new DocumentBuilder()
     // Set the title of the API
-    .setTitle('Demo API')
-    // Set the description of the API
-    .setDescription('Demo API description')
+    .setTitle('Demo Langchain API')
     // Set the version of the API
-    .setVersion('1.0.0')
+    .setVersion('1.0')
+    // Set the description of the API
+    .setDescription('Demo API')
     // Build the document
     .build();
   // Create a Swagger document using the application instance
   // and the document configuration
-  const document = SwaggerModule.createDocument(app, config);
+  const document = SwaggerModule.createDocument(app, swaggerConfig);
   // Setup Swagger module with the application instance and the Swagger document
   SwaggerModule.setup('api', app, document);
 

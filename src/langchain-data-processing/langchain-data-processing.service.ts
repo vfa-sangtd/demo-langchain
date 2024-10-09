@@ -10,12 +10,16 @@ import { createRetrievalChain } from 'langchain/chains/retrieval';
 import { ChatOpenAI } from '@langchain/openai';
 import { PrismaVectorStore } from '@langchain/community/vectorstores/prisma';
 import { PrismaClient, Prisma, Document } from '@prisma/client';
-import { UploadFileDto } from './dto/upload-file.dto';
 
 @Injectable()
 export class LangChainDataProcessingService {
-  //
-  async uploadFile(file: Express.Multer.File, condition: UploadFileDto) {
+  /**
+   * Handles the upload of a file and processes it. It supports files in PDF, TXT, and MD formats.
+   * @param {Express.Multer.File} file - The uploaded file to be processed.
+   * @returns {Promise<any>} - A success response or an error if processing fails.
+   * @memberof LangChainDataProcessingService
+   */
+  async embedding(file: Express.Multer.File): Promise<any> {
     try {
       let content = '';
       const buffer = file.buffer;
@@ -25,21 +29,18 @@ export class LangChainDataProcessingService {
           // Process PDF files
           const blob = new Blob([buffer]);
           const loader = new PDFLoader(blob, { splitPages: false });
-          let docs = await loader.load();
+          const docs = await loader.load();
 
-          // If keepOrigin is true, no chunking is performed
-          if (!condition.keepOrigin) {
-            const textSplitter = new RecursiveCharacterTextSplitter({
-              chunkSize: 1000,
-              chunkOverlap: 200,
-            });
-            docs = await textSplitter.splitDocuments(docs);
-          }
+          const textSplitter = new RecursiveCharacterTextSplitter({
+            chunkSize: 1000,
+            chunkOverlap: 200,
+          });
+          const textSplitted = await textSplitter.splitDocuments(docs);
 
           // Store the documents into the vector database
-          await this.storeToDatabase(docs);
+          await this.storeToDatabase(textSplitted);
 
-          return getSuccessResponse(HttpStatus.OK, docs);
+          return getSuccessResponse(HttpStatus.OK, textSplitted);
 
           // const resultOne = await vectorStore.similaritySearch('Suspendisse', 1);
           // console.log('resultOne', resultOne);
@@ -78,24 +79,19 @@ export class LangChainDataProcessingService {
         case 'text/markdown': {
           // Process TXT and Markdown files
           content = buffer.toString('utf-8');
-          console.log('File content:', content);
-
           // Create a single document from the content
-          let docs = [{ pageContent: content, metadata: null }];
+          const docs = [{ pageContent: content, metadata: null }];
 
-          // If keepOrigin is false, chunk the content
-          if (!condition.keepOrigin) {
-            const textSplitter = new RecursiveCharacterTextSplitter({
-              chunkSize: 1000,
-              chunkOverlap: 200,
-            });
-            docs = await textSplitter.splitDocuments(docs);
-          }
+          const textSplitter = new RecursiveCharacterTextSplitter({
+            chunkSize: 1000,
+            chunkOverlap: 200,
+          });
+          const textSplitted = await textSplitter.splitDocuments(docs);
 
           // Store the documents into the vector database
-          await this.storeToDatabase(docs);
+          await this.storeToDatabase(textSplitted);
 
-          return getSuccessResponse(HttpStatus.OK, docs);
+          return getSuccessResponse(HttpStatus.OK, textSplitted);
         }
         default:
           // Handle unsupported file types
@@ -118,7 +114,10 @@ export class LangChainDataProcessingService {
     const db = new PrismaClient();
 
     const vectorStore = PrismaVectorStore.withModel<Document>(db).create(
-      new OpenAIEmbeddings({ openAIApiKey: process.env.OPENAI_API_KEY }),
+      new OpenAIEmbeddings({
+        openAIApiKey: process.env.OPENAI_API_KEY,
+        timeout: 15000,
+      }),
       {
         prisma: Prisma,
         tableName: 'Document',

@@ -75,6 +75,8 @@ Nest is [MIT licensed](LICENSE).
 Basic:
 
 https://js.langchain.com/docs/tutorials/qa_chat_history/
+https://medium.com/@abdullahirfan99_80517/langchain-with-nestjs-node-framework-talk-with-documents-part-1-b099a392822e
+https://github.com/Jeon-man/nestjs-langchain-pgvector
 
 https://js.langchain.com/docs/integrations/vectorstores/prisma/
 yarn prisma migrate dev --create-only

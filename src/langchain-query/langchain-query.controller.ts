@@ -9,7 +9,7 @@ export class LangChainQueryController {
   constructor(private readonly langChainQueryService: LangChainQueryService) {}
 
   @Get()
-  async chat(@Body() messagesDto: BasicMessageDto) {
-    return this.langChainQueryService.query(messagesDto);
+  async chat(@Body() condition: BasicMessageDto) {
+    return this.langChainQueryService.query(condition);
   }
 }

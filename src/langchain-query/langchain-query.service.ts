@@ -10,8 +10,9 @@ import { getSuccessResponse } from '../common/utils/common-function';
 
 @Injectable()
 export class LangChainQueryService {
-  async query(basicMessageDto: BasicMessageDto) {
+  async query(condition: BasicMessageDto) {
     try {
+      console.log('in:', condition.query);
       const prompt = PromptTemplate.fromTemplate('BASIC_CHAT_TEMPLATE');
 
       const model = new ChatOpenAI({
@@ -22,11 +23,10 @@ export class LangChainQueryService {
       const outputParser = new HttpResponseOutputParser();
       const chain = prompt.pipe(model).pipe(outputParser);
       const response = await chain.invoke({
-        input: basicMessageDto.query,
+        input: condition.query,
       });
       return getSuccessResponse(
         HttpStatus.OK,
-
         Object.values(response)
           .map((code) => String.fromCharCode(code))
           .join(''),
