@@ -54,10 +54,8 @@ async function bootstrap() {
   SwaggerModule.setup('api', app, document);
 
   // Start the application and listen for requests on port 3000
-  await app.listen(3000).then(async () => {
-    Logger.log(`Application is running on: ${await app.getUrl()}`);
-    Logger.log('Yeeeeeeeh!');
-  });
+  await app.listen(3000, '127.0.0.1');
+  Logger.log(`Hell-o! ${await app.getUrl()}/api/test`);
 }
 
 bootstrap();
