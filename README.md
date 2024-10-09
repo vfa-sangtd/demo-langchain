@@ -75,3 +75,6 @@ Nest is [MIT licensed](LICENSE).
 Basic:
 
 https://js.langchain.com/docs/tutorials/qa_chat_history/
+
+https://js.langchain.com/docs/integrations/vectorstores/prisma/
+
