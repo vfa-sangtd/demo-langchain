@@ -2,28 +2,28 @@ import {
   Body,
   Controller,
   FileTypeValidator,
+  Get,
   MaxFileSizeValidator,
   ParseFilePipe,
   Post,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
-import { LangChainDataProcessingService } from './langchain-data-processing.service';
+import { LangChainService } from './langchain.service';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags } from '@nestjs/swagger';
+import { SimilaritySearchDto } from './dto/similarity-search.dto';
+import { BasicMessageDto } from './dto/query.dto';
 
-@ApiTags('Data Processing')
-@Controller('/data')
-export class LangChainDataProcessingController {
-  constructor(
-    private readonly langChainDataProcessingService: LangChainDataProcessingService,
-  ) {}
+@ApiTags('Langchain')
+@Controller('/langchain')
+export class LangChainController {
+  constructor(private readonly langChainService: LangChainService) {}
 
   /**
    * Handles the upload of a file and processes it. It supports files in PDF, TXT, and MD formats.
    * @param {Express.Multer.File} file - The uploaded file to be processed.
    * @returns {Promise<any>} - A success response or an error if processing fails.
-   * @memberof LangChainDataProcessingController
    */
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
@@ -42,6 +42,22 @@ export class LangChainDataProcessingController {
     )
     file: Express.Multer.File,
   ): Promise<any> {
-    return await this.langChainDataProcessingService.embedding(file);
+    return await this.langChainService.embedding(file);
+  }
+
+  /**
+   * Similarity search
+   */
+  @Get('similarity-search')
+  async getSimilaritySearch(@Body() condition: SimilaritySearchDto) {
+    return this.langChainService.getSimilaritySearch(condition);
+  }
+
+  /**
+   *
+   */
+  @Get('query')
+  async query(@Body() condition: BasicMessageDto) {
+    return this.langChainService.query(condition);
   }
 }

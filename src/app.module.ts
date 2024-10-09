@@ -2,15 +2,13 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { PrismaModule } from './prisma/prisma.module';
-import { LangChainQueryModule } from './langchain-query/langchain-query.module';
-import { LangChainDataProcessingModule } from './langchain-data-processing/langchain-data-processing.module';
+import { LangChainModule } from './langchain/langchain.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot(),
     PrismaModule,
-    LangChainQueryModule,
-    LangChainDataProcessingModule,
+    LangChainModule,
   ],
   controllers: [AppController],
   providers: [],

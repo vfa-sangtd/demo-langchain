@@ -4,20 +4,22 @@ import { getSuccessResponse } from 'src/common/utils/common-function';
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
 import { MemoryVectorStore } from 'langchain/vectorstores/memory';
 import { OpenAIEmbeddings } from '@langchain/openai';
-import { ChatPromptTemplate } from '@langchain/core/prompts';
+import { ChatPromptTemplate, PromptTemplate } from '@langchain/core/prompts';
 import { createStuffDocumentsChain } from 'langchain/chains/combine_documents';
 import { createRetrievalChain } from 'langchain/chains/retrieval';
 import { ChatOpenAI } from '@langchain/openai';
 import { PrismaVectorStore } from '@langchain/community/vectorstores/prisma';
 import { PrismaClient, Prisma, Document } from '@prisma/client';
+import { SimilaritySearchDto } from './dto/similarity-search.dto';
+import { BasicMessageDto } from './dto/query.dto';
+import { HttpResponseOutputParser } from 'langchain/output_parsers';
 
 @Injectable()
-export class LangChainDataProcessingService {
+export class LangChainService {
   /**
    * Handles the upload of a file and processes it. It supports files in PDF, TXT, and MD formats.
    * @param {Express.Multer.File} file - The uploaded file to be processed.
    * @returns {Promise<any>} - A success response or an error if processing fails.
-   * @memberof LangChainDataProcessingService
    */
   async embedding(file: Express.Multer.File): Promise<any> {
     try {
@@ -35,12 +37,12 @@ export class LangChainDataProcessingService {
             chunkSize: 1000,
             chunkOverlap: 200,
           });
-          const textSplitted = await textSplitter.splitDocuments(docs);
+          const texts = await textSplitter.splitDocuments(docs);
 
           // Store the documents into the vector database
-          await this.storeToDatabase(textSplitted);
+          await this.storeToDatabase(texts);
 
-          return getSuccessResponse(HttpStatus.OK, textSplitted);
+          return getSuccessResponse(HttpStatus.OK, texts);
 
           // const resultOne = await vectorStore.similaritySearch('Suspendisse', 1);
           // console.log('resultOne', resultOne);
@@ -105,6 +107,69 @@ export class LangChainDataProcessingService {
     }
   }
 
+  /**
+   * Similarity search
+   */
+  async getSimilaritySearch(condition: SimilaritySearchDto): Promise<any> {
+    try {
+    } catch (error) {
+      throw new HttpException(error, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  /**
+   *
+   */
+  async query(condition: BasicMessageDto) {
+    try {
+      console.log('in:', condition.query);
+      const prompt = PromptTemplate.fromTemplate('BASIC_CHAT_TEMPLATE');
+
+      const model = new ChatOpenAI({
+        // temperature: +openAI.BASIC_CHAT_OPENAI_TEMPERATURE,
+        modelName: 'gpt-3.5-turbo', //openAI.GPT_3_5_TURBO_1106.toString(),
+      });
+
+      const outputParser = new HttpResponseOutputParser();
+      const chain = prompt.pipe(model).pipe(outputParser);
+      const response = await chain.invoke({
+        input: condition.query,
+      });
+      return getSuccessResponse(
+        HttpStatus.OK,
+        Object.values(response)
+          .map((code) => String.fromCharCode(code))
+          .join(''),
+      );
+    } catch (error) {
+      throw new HttpException(error, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  // async test(): Promise<any> {
+  //   console.log('Testing...', process.env.OPENAI_API_KEY);
+  //   // Auto-trace LLM calls in-context
+  //   const client = wrapOpenAI(
+  //     new OpenAI({ apiKey: process.env.OPENAI_API_KEY }),
+  //   );
+
+  //   // Auto-trace this function
+  //   const pipeline = traceable(async (user_input) => {
+  //     const result = await client.chat.completions.create({
+  //       messages: [{ role: 'user', content: user_input }],
+  //       model: 'gpt-3.5-turbo',
+  //     });
+  //     return result.choices[0].message.content;
+  //   });
+
+  //   await pipeline;
+
+  //   console.log('...ending.');
+  //   // Out: Hello there! How can I assist you today?
+  //   return 'Hello World!';
+  // }
+
+  //---------------------------------------------------------------------------
   /**
    * Helper function to store documents into the vector database.
    *
