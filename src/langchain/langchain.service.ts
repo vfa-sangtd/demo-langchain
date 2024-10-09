@@ -2,20 +2,26 @@ import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { PDFLoader } from '@langchain/community/document_loaders/fs/pdf';
 import { getSuccessResponse } from 'src/common/utils/common-function';
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
-import { MemoryVectorStore } from 'langchain/vectorstores/memory';
 import { OpenAIEmbeddings } from '@langchain/openai';
-import { ChatPromptTemplate, PromptTemplate } from '@langchain/core/prompts';
+import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { createStuffDocumentsChain } from 'langchain/chains/combine_documents';
-import { createRetrievalChain } from 'langchain/chains/retrieval';
 import { ChatOpenAI } from '@langchain/openai';
 import { PrismaVectorStore } from '@langchain/community/vectorstores/prisma';
 import { PrismaClient, Prisma, Document } from '@prisma/client';
 import { SimilaritySearchDto } from './dto/similarity-search.dto';
 import { BasicMessageDto } from './dto/query.dto';
-import { HttpResponseOutputParser } from 'langchain/output_parsers';
 
 @Injectable()
 export class LangChainService {
+  // Prisma Client
+  private readonly db = new PrismaClient();
+  private vectorStore: any;
+
+  constructor() {
+    // Initialize the vector store in the constructor
+    this.initializeVectorStore();
+  }
+
   /**
    * Handles the upload of a file and processes it. It supports files in PDF, TXT, and MD formats.
    * @param {Express.Multer.File} file - The uploaded file to be processed.
@@ -43,57 +49,24 @@ export class LangChainService {
           await this.storeToDatabase(texts);
 
           return getSuccessResponse(HttpStatus.OK, texts);
-
-          // const resultOne = await vectorStore.similaritySearch('Suspendisse', 1);
-          // console.log('resultOne', resultOne);
-          // // 2. Incorporate the retriever into a question-answering chain.
-          // const llm = new ChatOpenAI({
-          //   model: 'gpt-3.5-turbo',
-          //   temperature: 0,
-          // });
-          // const systemPrompt =
-          //   'You are an assistant for question-answering tasks. ' +
-          //   'Use the following pieces of retrieved context to answer ' +
-          //   "the question. If you don't know the answer, say that you " +
-          //   "don't know. Use three sentences maximum and keep the " +
-          //   'answer concise.' +
-          //   '\n\n' +
-          //   '{context}';
-          // const prompt = ChatPromptTemplate.fromMessages([
-          //   ['system', systemPrompt],
-          //   ['human', '{input}'],
-          // ]);
-          // const questionAnswerChain = await createStuffDocumentsChain({
-          //   llm,
-          //   prompt,
-          // });
-          // const ragChain = await createRetrievalChain({
-          //   retriever,
-          //   combineDocsChain: questionAnswerChain,
-          // });
-          // const response = await ragChain.invoke({
-          //   input: 'What is Donec  lacus  nunc?',
-          // });
-          // console.log('answer', response.answer);
-          // content = docs[0].pageContent.toString();
         }
         case 'text/plain':
         case 'text/markdown': {
           // Process TXT and Markdown files
           content = buffer.toString('utf-8');
           // Create a single document from the content
-          const docs = [{ pageContent: content, metadata: null }];
+          const docs = [{ pageContent: content, metadata: {} }];
 
           const textSplitter = new RecursiveCharacterTextSplitter({
             chunkSize: 1000,
             chunkOverlap: 200,
           });
-          const textSplitted = await textSplitter.splitDocuments(docs);
+          const texts = await textSplitter.splitDocuments(docs);
 
           // Store the documents into the vector database
-          await this.storeToDatabase(textSplitted);
+          await this.storeToDatabase(texts);
 
-          return getSuccessResponse(HttpStatus.OK, textSplitted);
+          return getSuccessResponse(HttpStatus.OK, texts);
         }
         default:
           // Handle unsupported file types
@@ -122,63 +95,76 @@ export class LangChainService {
    */
   async query(condition: BasicMessageDto) {
     try {
-      console.log('in:', condition.query);
-      const prompt = PromptTemplate.fromTemplate('BASIC_CHAT_TEMPLATE');
+      const { query } = condition;
 
-      const model = new ChatOpenAI({
-        // temperature: +openAI.BASIC_CHAT_OPENAI_TEMPERATURE,
-        modelName: 'gpt-3.5-turbo', //openAI.GPT_3_5_TURBO_1106.toString(),
+      // Step 1: Retrieve documents based on the query (5 most similar results)
+      const searchResults = await this.vectorStore.similaritySearch(query, 5);
+
+      if (!Array.isArray(searchResults) || searchResults.length === 0) {
+        return getSuccessResponse(
+          HttpStatus.OK,
+          'No relevant documents found for the query',
+        );
+      }
+
+      // Format the search results to ensure proper structure
+      const formattedResults = searchResults.map((doc) => ({
+        pageContent: doc.pageContent || '',
+        metadata: doc.metadata || {},
+      }));
+
+      // Combine the contents of the retrieved documents into a single context string
+      const context = formattedResults
+        .map((doc) => doc.pageContent)
+        .join('\n\n');
+
+      // Step 2: Create the question-answering chain (RAG Chain)
+      const llm = new ChatOpenAI({
+        model: 'gpt-3.5-turbo',
+        // Control randomness
+        temperature: 0,
       });
 
-      const outputParser = new HttpResponseOutputParser();
-      const chain = prompt.pipe(model).pipe(outputParser);
-      const response = await chain.invoke({
-        input: condition.query,
+      // Use ChatGPT to combine retrieved documents into a response
+      const systemPrompt = `
+        You are an assistant for answering questions based on the following context.
+        Use the context to answer the question. If the answer isn't in the context, say that you don't know.
+        Answer in three sentences maximum.
+    
+        Context:
+        {context}
+      `;
+
+      const prompt = ChatPromptTemplate.fromMessages([
+        ['system', systemPrompt],
+        ['human', '{input}'],
+      ]);
+
+      const questionAnswerChain = await createStuffDocumentsChain({
+        llm,
+        prompt,
       });
-      return getSuccessResponse(
-        HttpStatus.OK,
-        Object.values(response)
-          .map((code) => String.fromCharCode(code))
-          .join(''),
-      );
+
+      // Step 3: Invoke the chain with user input and retrieved context
+      const response = await questionAnswerChain.invoke({
+        // The user's query
+        input: query,
+        // Pass context
+        context: [context],
+      });
+
+      return getSuccessResponse(HttpStatus.OK, response);
     } catch (error) {
       throw new HttpException(error, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
-  // async test(): Promise<any> {
-  //   console.log('Testing...', process.env.OPENAI_API_KEY);
-  //   // Auto-trace LLM calls in-context
-  //   const client = wrapOpenAI(
-  //     new OpenAI({ apiKey: process.env.OPENAI_API_KEY }),
-  //   );
-
-  //   // Auto-trace this function
-  //   const pipeline = traceable(async (user_input) => {
-  //     const result = await client.chat.completions.create({
-  //       messages: [{ role: 'user', content: user_input }],
-  //       model: 'gpt-3.5-turbo',
-  //     });
-  //     return result.choices[0].message.content;
-  //   });
-
-  //   await pipeline;
-
-  //   console.log('...ending.');
-  //   // Out: Hello there! How can I assist you today?
-  //   return 'Hello World!';
-  // }
-
   //---------------------------------------------------------------------------
   /**
-   * Helper function to store documents into the vector database.
-   *
-   * @param documents - Array of documents to be stored
+   * Private method to initialize the vector store
    */
-  private async storeToDatabase(documents: { pageContent: string }[]) {
-    const db = new PrismaClient();
-
-    const vectorStore = PrismaVectorStore.withModel<Document>(db).create(
+  private initializeVectorStore() {
+    this.vectorStore = PrismaVectorStore.withModel<Document>(this.db).create(
       new OpenAIEmbeddings({
         openAIApiKey: process.env.OPENAI_API_KEY,
         timeout: 15000,
@@ -193,11 +179,17 @@ export class LangChainService {
         },
       },
     );
+  }
 
-    await vectorStore.addModels(
-      await db.$transaction(
+  /**
+   * Helper function to store documents into the vector database.
+   * @param documents - Array of documents to be stored
+   */
+  private async storeToDatabase(documents: { pageContent: string }[]) {
+    await this.vectorStore.addModels(
+      await this.db.$transaction(
         documents.map((doc) =>
-          db.document.create({ data: { content: doc.pageContent } }),
+          this.db.document.create({ data: { content: doc.pageContent } }),
         ),
       ),
     );
