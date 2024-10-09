@@ -77,4 +77,6 @@ Basic:
 https://js.langchain.com/docs/tutorials/qa_chat_history/
 
 https://js.langchain.com/docs/integrations/vectorstores/prisma/
-
+yarn prisma migrate dev --create-only
+CREATE EXTENSION IF NOT EXISTS vector;
+yarn prisma migrate dev

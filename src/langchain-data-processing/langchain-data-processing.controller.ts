@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   FileTypeValidator,
   MaxFileSizeValidator,
@@ -10,6 +11,7 @@ import {
 import { LangChainDataProcessingService } from './langchain-data-processing.service';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags } from '@nestjs/swagger';
+import { UploadFileDto } from './dto/upload-file.dto';
 
 @ApiTags('Data Processing')
 @Controller('/data')
@@ -34,7 +36,11 @@ export class LangChainDataProcessingController {
       }),
     )
     file: Express.Multer.File,
+    @Body() condition: UploadFileDto,
   ) {
-    return await this.langChainDataProcessingService.uploadFile(file);
+    return await this.langChainDataProcessingService.uploadFile(
+      file,
+      condition,
+    );
   }
 }
