@@ -4,7 +4,6 @@ import { getSuccessResponse } from 'src/common/utils/common-function';
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
 import { OpenAIEmbeddings } from '@langchain/openai';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
-import { createStuffDocumentsChain } from 'langchain/chains/combine_documents';
 import { ChatOpenAI } from '@langchain/openai';
 import { PrismaVectorStore } from '@langchain/community/vectorstores/prisma';
 import { PrismaClient, Prisma, Document } from '@prisma/client';
@@ -12,6 +11,9 @@ import { SimilaritySearchDto } from './dto/similarity-search.dto';
 import { BasicMessageDto } from './dto/query.dto';
 import { StringOutputParser } from '@langchain/core/output_parsers';
 import { RunnableSequence } from '@langchain/core/runnables';
+
+const CHUNK_SIZE = 1000;
+const CHUNK_OVERLAP = 200;
 
 @Injectable()
 export class LangChainService {
@@ -31,8 +33,11 @@ export class LangChainService {
    */
   async embedding(file: Express.Multer.File): Promise<any> {
     try {
-      let content = '';
       const buffer = file.buffer;
+      const textSplitter = new RecursiveCharacterTextSplitter({
+        chunkSize: CHUNK_SIZE,
+        chunkOverlap: CHUNK_OVERLAP,
+      });
 
       switch (file.mimetype) {
         case 'application/pdf': {
@@ -41,10 +46,6 @@ export class LangChainService {
           const loader = new PDFLoader(blob, { splitPages: false });
           const docs = await loader.load();
 
-          const textSplitter = new RecursiveCharacterTextSplitter({
-            chunkSize: 1000,
-            chunkOverlap: 200,
-          });
           const texts = await textSplitter.splitDocuments(docs);
 
           // Store the documents into the vector database
@@ -55,14 +56,10 @@ export class LangChainService {
         case 'text/plain':
         case 'text/markdown': {
           // Process TXT and Markdown files
-          content = buffer.toString('utf-8');
+          const content = buffer.toString('utf-8');
           // Create a single document from the content
           const docs = [{ pageContent: content, metadata: {} }];
 
-          const textSplitter = new RecursiveCharacterTextSplitter({
-            chunkSize: 1000,
-            chunkOverlap: 200,
-          });
           const texts = await textSplitter.splitDocuments(docs);
 
           // Store the documents into the vector database
@@ -132,14 +129,7 @@ export class LangChainService {
         .map((doc) => doc.pageContent)
         .join('\n\n');
 
-      // Step 2: Create the question-answering chain (RAG Chain)
-      const llm = new ChatOpenAI({
-        model: 'gpt-3.5-turbo',
-        // Control randomness
-        temperature: 0,
-      });
-
-      // Use ChatGPT to combine retrieved documents into a response
+      // Step 2: Create prompt
       const systemTemplate = `
         You are an assistant for answering questions based on the following context.
         Use the context to answer the question. If the answer isn't in the context, say that you don't know.
@@ -156,6 +146,11 @@ export class LangChainService {
       ]);
 
       // Step 3: Invoke the chain with user input and retrieved context
+      const llm = new ChatOpenAI({
+        model: 'gpt-3.5-turbo',
+        // Control randomness
+        temperature: 0,
+      });
       const outputParser = new StringOutputParser();
       const chain = RunnableSequence.from([chatPrompt, llm, outputParser]);
 
