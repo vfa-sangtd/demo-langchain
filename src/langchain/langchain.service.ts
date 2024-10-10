@@ -10,6 +10,8 @@ import { PrismaVectorStore } from '@langchain/community/vectorstores/prisma';
 import { PrismaClient, Prisma, Document } from '@prisma/client';
 import { SimilaritySearchDto } from './dto/similarity-search.dto';
 import { BasicMessageDto } from './dto/query.dto';
+import { StringOutputParser } from '@langchain/core/output_parsers';
+import { RunnableSequence } from '@langchain/core/runnables';
 
 @Injectable()
 export class LangChainService {
@@ -85,6 +87,18 @@ export class LangChainService {
    */
   async getSimilaritySearch(condition: SimilaritySearchDto): Promise<any> {
     try {
+      const { query, num } = condition;
+
+      const searchResults = await this.vectorStore.similaritySearch(query, num);
+
+      if (!Array.isArray(searchResults) || searchResults.length === 0) {
+        return getSuccessResponse(
+          HttpStatus.OK,
+          'No relevant documents found for the query',
+        );
+      }
+
+      return getSuccessResponse(HttpStatus.OK, searchResults);
     } catch (error) {
       throw new HttpException(error, HttpStatus.INTERNAL_SERVER_ERROR);
     }
@@ -95,10 +109,10 @@ export class LangChainService {
    */
   async query(condition: BasicMessageDto) {
     try {
-      const { query } = condition;
+      const { query, num } = condition;
 
       // Step 1: Retrieve documents based on the query (5 most similar results)
-      const searchResults = await this.vectorStore.similaritySearch(query, 5);
+      const searchResults = await this.vectorStore.similaritySearch(query, num);
 
       if (!Array.isArray(searchResults) || searchResults.length === 0) {
         return getSuccessResponse(
@@ -126,7 +140,7 @@ export class LangChainService {
       });
 
       // Use ChatGPT to combine retrieved documents into a response
-      const systemPrompt = `
+      const systemTemplate = `
         You are an assistant for answering questions based on the following context.
         Use the context to answer the question. If the answer isn't in the context, say that you don't know.
         Answer in three sentences maximum.
@@ -134,26 +148,25 @@ export class LangChainService {
         Context:
         {context}
       `;
+      const humanTemplate = '{query}';
 
-      const prompt = ChatPromptTemplate.fromMessages([
-        ['system', systemPrompt],
-        ['human', '{input}'],
+      const chatPrompt = ChatPromptTemplate.fromMessages([
+        ['system', systemTemplate],
+        ['human', humanTemplate],
       ]);
 
-      const questionAnswerChain = await createStuffDocumentsChain({
-        llm,
-        prompt,
-      });
-
       // Step 3: Invoke the chain with user input and retrieved context
-      const response = await questionAnswerChain.invoke({
-        // The user's query
-        input: query,
-        // Pass context
-        context: [context],
+      const outputParser = new StringOutputParser();
+      const chain = RunnableSequence.from([chatPrompt, llm, outputParser]);
+
+      const response = await chain.invoke({
+        query: query,
+        context: context,
       });
 
-      return getSuccessResponse(HttpStatus.OK, response);
+      return getSuccessResponse(HttpStatus.OK, {
+        message: response,
+      });
     } catch (error) {
       throw new HttpException(error, HttpStatus.INTERNAL_SERVER_ERROR);
     }
