@@ -17,8 +17,9 @@ datasource db {
 // ...
 
 model Document {
-  id      String                 @id @default(cuid())
-  content String
-  vector  Unsupported("vector")?
+  id         String                 @id @default(cuid())
+  content    String
+  created_at DateTime               @default(now())
+  updated_at DateTime               @updatedAt
+  vector     Unsupported("vector")?
 }
-
