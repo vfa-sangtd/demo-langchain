@@ -80,28 +80,6 @@ export class LangChainService {
   }
 
   /**
-   * Similarity search
-   */
-  async getSimilaritySearch(condition: SimilaritySearchDto): Promise<any> {
-    try {
-      const { query, num } = condition;
-
-      const searchResults = await this.vectorStore.similaritySearch(query, num);
-
-      if (!Array.isArray(searchResults) || searchResults.length === 0) {
-        return getSuccessResponse(
-          HttpStatus.OK,
-          'No relevant documents found for the query',
-        );
-      }
-
-      return getSuccessResponse(HttpStatus.OK, searchResults);
-    } catch (error) {
-      throw new HttpException(error, HttpStatus.INTERNAL_SERVER_ERROR);
-    }
-  }
-
-  /**
    *
    */
   async query(condition: BasicMessageDto) {
@@ -161,6 +139,7 @@ export class LangChainService {
 
       return getSuccessResponse(HttpStatus.OK, {
         message: response,
+        similaritySearch: searchResults,
       });
     } catch (error) {
       throw new HttpException(error, HttpStatus.INTERNAL_SERVER_ERROR);

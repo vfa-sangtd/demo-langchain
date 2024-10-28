@@ -25,6 +25,7 @@ export class LangChainController {
    * @param {Express.Multer.File} file - The uploaded file to be processed.
    * @returns {Promise<any>} - A success response or an error if processing fails.
    */
+  // TODO: Add chunk options
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
   async embedding(
@@ -43,14 +44,6 @@ export class LangChainController {
     file: Express.Multer.File,
   ): Promise<any> {
     return await this.langChainService.embedding(file);
-  }
-
-  /**
-   * Similarity search
-   */
-  @Get('similarity-search')
-  async getSimilaritySearch(@Body() condition: SimilaritySearchDto) {
-    return this.langChainService.getSimilaritySearch(condition);
   }
 
   /**
